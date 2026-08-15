@@ -429,23 +429,27 @@ export default function Dashboard() {
               label="Gap"
               value={formatValue(metric, out.postGap)}
               hint={String(out.endYear)}
+              explain={`Real India minus your stacked Synthetic India in ${out.endYear}. Positive = India above its counterfactual.`}
               alert
             />
             <StatCell
               label="% of stacked"
               value={formatPct(out.postGapPct)}
               hint={`${formatValue(metric, out.indiaLast)} vs ${formatValue(metric, out.customLast)}`}
+              explain="The gap expressed as a share of the stacked synthetic value — how big the effect is in relative terms."
               alert
             />
             <StatCell
               label="Paper gap"
               value={formatValue(metric, out.indiaLast - out.baselineLast)}
               hint="Published weights"
+              explain="The same end-year gap using the paper's original published donor recipe, for comparison with your stacked scenario."
             />
             <StatCell
               label="Placebo p"
               value={out.pValue.toFixed(2)}
               hint={`${out.placebos.length} donors`}
+              explain="Share of donor countries whose own post/pre fit ratio is at least as extreme as India's. Lower means India's gap stands out from placebo noise (≤ 0.10 highlighted)."
               alert={out.pValue <= 0.1}
             />
           </div>
@@ -621,7 +625,13 @@ export default function Dashboard() {
             </details>
             <details>
               <summary>Placebos</summary>
-              <div className="mt-3 overflow-x-auto">
+              <p className="mt-3 font-mono text-[0.72rem] leading-5 text-faint">
+                India&apos;s own post/pre RMSPE ratio is{" "}
+                <b className="text-ink">{out.indiaRatio.toFixed(2)}</b>. Each donor is
+                re-fit the same way; rows in red match or beat India, and the placebo{" "}
+                <i>p</i> = {out.pValue.toFixed(2)} is their share.
+              </p>
+              <div className="mt-2 overflow-x-auto">
                 <table className="ledger-table min-w-[480px]">
                   <thead>
                     <tr>
@@ -631,13 +641,16 @@ export default function Dashboard() {
                     </tr>
                   </thead>
                   <tbody>
-                    {out.placebos.map((p) => (
-                      <tr key={p.iso}>
-                        <td>{p.name}</td>
-                        <td className="num">{p.ratio.toFixed(2)}</td>
-                        <td className="num">{formatValue(metric, p.postGap)}</td>
-                      </tr>
-                    ))}
+                    {out.placebos.map((p) => {
+                      const extreme = p.ratio >= out.indiaRatio;
+                      return (
+                        <tr key={p.iso} className={extreme ? "text-ledger" : undefined}>
+                          <td>{p.name}</td>
+                          <td className="num">{p.ratio.toFixed(2)}</td>
+                          <td className="num">{formatValue(metric, p.postGap)}</td>
+                        </tr>
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>
@@ -724,10 +737,11 @@ function StatCell(props: {
   label: string;
   value: string;
   hint: string;
+  explain?: string;
   alert?: boolean;
 }) {
   return (
-    <div className="bg-paper px-3 py-3 sm:px-4">
+    <div className="bg-paper px-3 py-3 sm:px-4" title={props.explain}>
       <p className="font-mono text-[0.68rem] uppercase tracking-[0.12em] text-faint">
         {props.label}
       </p>

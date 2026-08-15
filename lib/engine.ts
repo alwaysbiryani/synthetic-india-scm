@@ -539,6 +539,7 @@ export function runEngine(input: EngineInput): EngineOutput {
     postGap,
     postGapPct,
     pValue,
+    indiaRatio,
     placebos,
     indiaLast,
     customLast,

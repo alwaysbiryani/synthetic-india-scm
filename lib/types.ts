@@ -63,6 +63,7 @@ export type EngineOutput = {
   postGap: number;
   postGapPct: number;
   pValue: number;
+  indiaRatio: number;
   placebos: PlaceboRow[];
   indiaLast: number;
   customLast: number;
