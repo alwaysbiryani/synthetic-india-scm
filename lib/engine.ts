@@ -61,10 +61,10 @@ export const PAPER_GOV_WEIGHTS: Weights = {
 };
 
 export const EVENTS = [
-  { year: 2014, label: "Modi elected" },
-  { year: 2015, label: "GDP base-year revision" },
-  { year: 2016, label: "Demonetization" },
-  { year: 2020, label: "COVID-19" },
+  { year: 2014, label: "Modi elected", short: "Modi elected" },
+  { year: 2015, label: "GDP base-year revision", short: "GDP revision" },
+  { year: 2016, label: "Demonetization", short: "Demonetization" },
+  { year: 2020, label: "COVID-19", short: "COVID-19" },
 ] as const;
 
 export const METRIC_META: Record<
