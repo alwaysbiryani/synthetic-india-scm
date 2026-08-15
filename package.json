@@ -2,6 +2,7 @@
   "name": "synthetic-india-scm",
   "version": "0.1.0",
   "private": true,
+  "description": "Unofficial Kick-the-tires playground for stacking criticisms of Grier & Grier (2026). Not the authors’ site.",
   "scripts": {
     "dev": "next dev",
     "build": "next build",
