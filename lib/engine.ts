@@ -494,32 +494,57 @@ export function runEngine(input: EngineInput): EngineOutput {
   const postGapPct = customLast !== 0 ? (100 * postGap) / customLast : 0;
   const preRmspe = Math.sqrt(mspe(indiaPath, customPath, pre));
 
-  const indiaRatio =
-    mspe(indiaPath, customPath, post) / Math.max(mspe(indiaPath, customPath, pre), 1e-8);
+  const countObs = (mask: boolean[]) =>
+    mask.reduce(
+      (n, on, i) =>
+        n + (on && indiaPath[i] != null && customPath[i] != null ? 1 : 0),
+      0,
+    );
+  const preN = countObs(pre);
+  const postN = countObs(post);
+  // The placebo test needs both a pre-period to fit and a post-period to score.
+  const scored = preN > 0 && postN > 0;
+
+  const indiaRatio = scored
+    ? mspe(indiaPath, customPath, post) /
+      Math.max(mspe(indiaPath, customPath, pre), 1e-8)
+    : NaN;
 
   const placebos: PlaceboRow[] = [];
-  for (const iso of eligible) {
-    const wj: Weights = {};
-    for (const k of eligible) {
-      if (k === iso) continue;
-      wj[k] = appliedWeights[k] ?? 0;
+  if (scored) {
+    for (const iso of eligible) {
+      const wj: Weights = {};
+      for (const k of eligible) {
+        if (k === iso) continue;
+        wj[k] = appliedWeights[k] ?? 0;
+      }
+      const mass = sumWeights(wj);
+      if (mass <= 1e-12) continue;
+      for (const k of Object.keys(wj)) wj[k] /= mass;
+      const yj = transformed[iso];
+      const sj = YEARS.map((_, i) => weightedSum(i, wj, transformed));
+      const ratio = mspe(yj, sj, post) / Math.max(mspe(yj, sj, pre), 1e-8);
+      placebos.push({
+        iso,
+        name: COUNTRIES[iso]?.name ?? iso,
+        ratio,
+        postGap: meanGap(yj, sj, post),
+      });
     }
-    const mass = sumWeights(wj);
-    if (mass <= 1e-12) continue;
-    for (const k of Object.keys(wj)) wj[k] /= mass;
-    const yj = transformed[iso];
-    const sj = YEARS.map((_, i) => weightedSum(i, wj, transformed));
-    const ratio = mspe(yj, sj, post) / Math.max(mspe(yj, sj, pre), 1e-8);
-    placebos.push({
-      iso,
-      name: COUNTRIES[iso]?.name ?? iso,
-      ratio,
-      postGap: meanGap(yj, sj, post),
-    });
+    placebos.sort((a, b) => b.ratio - a.ratio);
   }
-  placebos.sort((a, b) => b.ratio - a.ratio);
   const extreme = placebos.filter((p) => p.ratio >= indiaRatio).length;
-  const pValue = (1 + extreme) / (1 + placebos.length);
+  const pValue = scored ? (1 + extreme) / (1 + placebos.length) : NaN;
+
+  if (postN === 0) {
+    notes.push(
+      `No post-treatment years in this window — move the window end past ${effectiveTreatment} to score a gap and placebo test.`,
+    );
+  } else if (preN === 0) {
+    notes.push(
+      `No pre-treatment years in this window — move the window start before ${effectiveTreatment} to fit the synthetic and run the placebo test.`,
+    );
+  }
 
   if (input.metric === "rgdppc" && COUNTRIES.LKA?.gdpImputed) {
     notes.push("Sri Lanka GDP per capita is imputed (0.88× Philippines); it is not in income_panel.dta.");

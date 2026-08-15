@@ -447,8 +447,12 @@ export default function Dashboard() {
             />
             <StatCell
               label="Placebo p"
-              value={out.pValue.toFixed(2)}
-              hint={`${out.placebos.length} donors`}
+              value={Number.isFinite(out.pValue) ? out.pValue.toFixed(2) : "—"}
+              hint={
+                Number.isFinite(out.pValue)
+                  ? `${out.placebos.length} donors`
+                  : "needs pre + post years"
+              }
               explain="Share of donor countries whose own post/pre fit ratio is at least as extreme as India's. Lower means India's gap stands out from placebo noise (≤ 0.10 highlighted)."
               alert={out.pValue <= 0.1}
             />
@@ -626,10 +630,16 @@ export default function Dashboard() {
             <details>
               <summary>Placebos</summary>
               <p className="mt-3 font-mono text-[0.72rem] leading-5 text-faint">
-                India&apos;s own post/pre RMSPE ratio is{" "}
-                <b className="text-ink">{out.indiaRatio.toFixed(2)}</b>. Each donor is
-                re-fit the same way; rows in red match or beat India, and the placebo{" "}
-                <i>p</i> = {out.pValue.toFixed(2)} is their share.
+                {Number.isFinite(out.indiaRatio) ? (
+                  <>
+                    India&apos;s own post/pre RMSPE ratio is{" "}
+                    <b className="text-ink">{out.indiaRatio.toFixed(2)}</b>. Each donor
+                    is re-fit the same way; rows in red match or beat India, and the
+                    placebo <i>p</i> = {out.pValue.toFixed(2)} is their share.
+                  </>
+                ) : (
+                  "The placebo test needs both a pre- and a post-treatment period in the window. Widen the window so it spans the treatment year."
+                )}
               </p>
               <div className="mt-2 overflow-x-auto">
                 <table className="ledger-table min-w-[480px]">
