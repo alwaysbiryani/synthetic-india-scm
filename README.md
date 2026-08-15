@@ -2,6 +2,10 @@
 
 Interactive synthetic-control dashboard for Grier & Grier (2026), *Promises, Promises: Governance and Growth in India under Modi and the BJP*. Compare real India with the paper’s published Synthetic India, then re-weight donors and stack standard critiques.
 
+Repo: [alwaysbiryani/synthetic-india-scm](https://github.com/alwaysbiryani/synthetic-india-scm)
+
+[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https://github.com/alwaysbiryani/synthetic-india-scm)
+
 **Live local:** `npm run dev` → [http://localhost:3000](http://localhost:3000)
 
 ## What you can do
@@ -31,14 +35,11 @@ Requires Node 20+. No API keys or environment variables.
 
 ## Deploy on Vercel
 
-This folder is a standalone Next.js app. Data is bundled in `data/panel.json` (no Stata runtime).
+This folder is a standalone Next.js app. Data is bundled in `data/panel.json` (no Stata runtime). No environment variables.
 
-1. Push this directory to GitHub (it is the repo root).
-2. In Vercel: **Add New Project** → import the repo.
-3. Framework: Next.js. Root directory: `.` (leave default).
-4. Build command `next build`, output default. No env vars.
+**Fastest:** [Import this repo on Vercel](https://vercel.com/new/clone?repository-url=https://github.com/alwaysbiryani/synthetic-india-scm). Framework Next.js, root directory `.`, build `next build`.
 
-CLI:
+CLI (once `vercel login` has a valid token):
 
 ```bash
 npx vercel -y          # preview
