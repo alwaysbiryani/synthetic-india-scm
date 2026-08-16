@@ -1,7 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import SynthChart from "@/components/SynthChart";
+import { decodeState, encodeState } from "@/lib/urlState";
 import {
   COUNTRIES,
   EVENTS,
@@ -117,6 +118,77 @@ export default function Dashboard() {
   const [covidMode, setCovidMode] = useState<CovidMode>("full");
   const [lagYears, setLagYears] = useState(0);
   const [horizon, setHorizon] = useState<HorizonMode>("gdp");
+  const [ready, setReady] = useState(false);
+  const [copied, setCopied] = useState(false);
+
+  // Hydrate from the URL once, after mount. The static markup is rendered with
+  // default state, so applying the URL here (rather than in a lazy initialiser)
+  // keeps server and client markup identical and avoids a hydration mismatch.
+  // This is the "sync with an external system" case, so the set-state-in-effect
+  // rule is intentionally relaxed for this block only.
+  useEffect(() => {
+    /* eslint-disable react-hooks/set-state-in-effect */
+    const s = decodeState(window.location.search);
+    if (s.metric) setMetric(s.metric);
+    if (s.treatmentYear != null) setTreatmentYear(s.treatmentYear);
+    if (s.range) setRange(s.range);
+    if (s.weights) setWeights(s.weights);
+    if (s.scenarios) setScenarios(s.scenarios);
+    if (s.maxWeight != null) setMaxWeight(s.maxWeight);
+    if (s.excludeNondem != null) setExcludeNondem(s.excludeNondem);
+    if (s.accounting) setAccounting(s.accounting);
+    if (s.govSource) setGovSource(s.govSource);
+    if (s.covidMode) setCovidMode(s.covidMode);
+    if (s.lagYears != null) setLagYears(s.lagYears);
+    if (s.horizon) setHorizon(s.horizon);
+    setReady(true);
+    /* eslint-enable react-hooks/set-state-in-effect */
+  }, []);
+
+  // Mirror state into the URL (replace, not push, so we don't spam history).
+  useEffect(() => {
+    if (!ready) return;
+    const qs = encodeState({
+      metric,
+      treatmentYear,
+      range,
+      weights,
+      scenarios,
+      maxWeight,
+      excludeNondem,
+      accounting,
+      govSource,
+      covidMode,
+      lagYears,
+      horizon,
+    });
+    const url = qs ? `${window.location.pathname}?${qs}` : window.location.pathname;
+    window.history.replaceState(null, "", url);
+  }, [
+    ready,
+    metric,
+    treatmentYear,
+    range,
+    weights,
+    scenarios,
+    maxWeight,
+    excludeNondem,
+    accounting,
+    govSource,
+    covidMode,
+    lagYears,
+    horizon,
+  ]);
+
+  const copyLink = async () => {
+    try {
+      await navigator.clipboard.writeText(window.location.href);
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 1600);
+    } catch {
+      setCopied(false);
+    }
+  };
 
   const capOn = scenarios.includes("s1");
   const eligible = eligibleDonors({
@@ -213,6 +285,9 @@ export default function Dashboard() {
           <div className="btns mt-5 flex flex-wrap gap-3">
             <button type="button" className="btn-ghost btn" onClick={reset}>
               Reset to paper
+            </button>
+            <button type="button" className="btn-ghost btn" onClick={copyLink}>
+              {copied ? "Link copied ✓" : "Copy link to this view"}
             </button>
             <a className="btn-ghost btn" href="#workspace">
               Skip to the chart
@@ -315,6 +390,120 @@ export default function Dashboard() {
               </div>
             </fieldset>
           </div>
+
+          {scenarios.length > 0 ? (
+            <div className="workbench-knobs" aria-labelledby="engine-h">
+              <p id="engine-h" className="eyebrow !mb-0">
+                Scenario knobs
+              </p>
+              <div className="workbench-knobs-grid">
+                {SCENARIOS.filter((s) => scenarios.includes(s.id)).map((s) => (
+                  <div key={s.id} className="knob-card">
+                    <p className="font-mono text-[0.68rem] font-semibold uppercase tracking-[0.12em] text-ledger">
+                      {s.n} · {s.title}
+                    </p>
+                    {s.id === "s1" ? (
+                      <div className="mt-2 space-y-2">
+                        <label className="block font-mono text-[0.75rem]">
+                          Max donor weight ({(maxWeight * 100).toFixed(0)}%)
+                          <input
+                            type="range"
+                            min={10}
+                            max={50}
+                            className="mt-1"
+                            value={Math.round(maxWeight * 100)}
+                            onChange={(e) => setMaxWeight(Number(e.target.value) / 100)}
+                          />
+                        </label>
+                        <label className="flex items-center gap-2 font-mono text-[0.75rem]">
+                          <input
+                            type="checkbox"
+                            checked={excludeNondem}
+                            onChange={(e) => setExcludeNondem(e.target.checked)}
+                          />
+                          Exclude one-party states
+                        </label>
+                      </div>
+                    ) : null}
+                    {s.id === "s2" ? (
+                      <label className="mt-2 block font-mono text-[0.75rem]">
+                        Accounting
+                        <select
+                          className="mt-1 w-full"
+                          value={accounting}
+                          onChange={(e) =>
+                            setAccounting(e.target.value as AccountingMode)
+                          }
+                        >
+                          <option value="raw">Raw PWT 11.0</option>
+                          <option value="backcast">75% back-cast after 2015</option>
+                          <option value="proxy">55% physical-proxy analogue</option>
+                        </select>
+                      </label>
+                    ) : null}
+                    {s.id === "s3" ? (
+                      <label className="mt-2 block font-mono text-[0.75rem]">
+                        Governance source
+                        <select
+                          className="mt-1 w-full"
+                          value={govSource}
+                          onChange={(e) => setGovSource(e.target.value as GovSource)}
+                        >
+                          <option value="vdem">V-Dem raw</option>
+                          <option value="statutory">Statutory analogue</option>
+                          <option value="dif">DIF blend</option>
+                        </select>
+                        {metric === "rgdppc" ? (
+                          <span className="mt-1 block text-ledger">
+                            Use Polyarchy or Religion for this knob.
+                          </span>
+                        ) : null}
+                      </label>
+                    ) : null}
+                    {s.id === "s4" ? (
+                      <label className="mt-2 block font-mono text-[0.75rem]">
+                        Sample
+                        <select
+                          className="mt-1 w-full"
+                          value={covidMode}
+                          onChange={(e) => setCovidMode(e.target.value as CovidMode)}
+                        >
+                          <option value="full">Full window</option>
+                          <option value="preCovid">Through 2019</option>
+                          <option value="ife">Interpolate 2020–21</option>
+                        </select>
+                      </label>
+                    ) : null}
+                    {s.id === "s5" ? (
+                      <div className="mt-2 space-y-2">
+                        <label className="block font-mono text-[0.75rem]">
+                          Policy lag ({lagYears} year{lagYears === 1 ? "" : "s"})
+                          <input
+                            type="range"
+                            min={0}
+                            max={7}
+                            className="mt-1"
+                            value={lagYears}
+                            onChange={(e) => setLagYears(Number(e.target.value))}
+                          />
+                        </label>
+                        <label className="flex items-center gap-2 font-mono text-[0.75rem]">
+                          <input
+                            type="checkbox"
+                            checked={horizon === "capital"}
+                            onChange={(e) =>
+                              setHorizon(e.target.checked ? "capital" : "gdp")
+                            }
+                          />
+                          Solow capital instead of GDP
+                        </label>
+                      </div>
+                    ) : null}
+                  </div>
+                ))}
+              </div>
+            </div>
+          ) : null}
 
           <div className="workbench-stage">
         <figure>
@@ -457,120 +646,6 @@ export default function Dashboard() {
               alert={out.pValue <= 0.1}
             />
           </div>
-
-          {scenarios.length > 0 ? (
-            <div className="workbench-knobs" aria-labelledby="engine-h">
-              <p id="engine-h" className="eyebrow !mb-0">
-                Scenario knobs
-              </p>
-              <div className="workbench-knobs-grid">
-                {SCENARIOS.filter((s) => scenarios.includes(s.id)).map((s) => (
-                  <div key={s.id} className="knob-card">
-                    <p className="font-mono text-[0.68rem] font-semibold uppercase tracking-[0.12em] text-ledger">
-                      {s.n} · {s.title}
-                    </p>
-                    {s.id === "s1" ? (
-                      <div className="mt-2 space-y-2">
-                        <label className="block font-mono text-[0.75rem]">
-                          Max donor weight ({(maxWeight * 100).toFixed(0)}%)
-                          <input
-                            type="range"
-                            min={10}
-                            max={50}
-                            className="mt-1"
-                            value={Math.round(maxWeight * 100)}
-                            onChange={(e) => setMaxWeight(Number(e.target.value) / 100)}
-                          />
-                        </label>
-                        <label className="flex items-center gap-2 font-mono text-[0.75rem]">
-                          <input
-                            type="checkbox"
-                            checked={excludeNondem}
-                            onChange={(e) => setExcludeNondem(e.target.checked)}
-                          />
-                          Exclude one-party states
-                        </label>
-                      </div>
-                    ) : null}
-                    {s.id === "s2" ? (
-                      <label className="mt-2 block font-mono text-[0.75rem]">
-                        Accounting
-                        <select
-                          className="mt-1 w-full"
-                          value={accounting}
-                          onChange={(e) =>
-                            setAccounting(e.target.value as AccountingMode)
-                          }
-                        >
-                          <option value="raw">Raw PWT 11.0</option>
-                          <option value="backcast">75% back-cast after 2015</option>
-                          <option value="proxy">55% physical-proxy analogue</option>
-                        </select>
-                      </label>
-                    ) : null}
-                    {s.id === "s3" ? (
-                      <label className="mt-2 block font-mono text-[0.75rem]">
-                        Governance source
-                        <select
-                          className="mt-1 w-full"
-                          value={govSource}
-                          onChange={(e) => setGovSource(e.target.value as GovSource)}
-                        >
-                          <option value="vdem">V-Dem raw</option>
-                          <option value="statutory">Statutory analogue</option>
-                          <option value="dif">DIF blend</option>
-                        </select>
-                        {metric === "rgdppc" ? (
-                          <span className="mt-1 block text-ledger">
-                            Use Polyarchy or Religion for this knob.
-                          </span>
-                        ) : null}
-                      </label>
-                    ) : null}
-                    {s.id === "s4" ? (
-                      <label className="mt-2 block font-mono text-[0.75rem]">
-                        Sample
-                        <select
-                          className="mt-1 w-full"
-                          value={covidMode}
-                          onChange={(e) => setCovidMode(e.target.value as CovidMode)}
-                        >
-                          <option value="full">Full window</option>
-                          <option value="preCovid">Through 2019</option>
-                          <option value="ife">Interpolate 2020–21</option>
-                        </select>
-                      </label>
-                    ) : null}
-                    {s.id === "s5" ? (
-                      <div className="mt-2 space-y-2">
-                        <label className="block font-mono text-[0.75rem]">
-                          Policy lag ({lagYears} year{lagYears === 1 ? "" : "s"})
-                          <input
-                            type="range"
-                            min={0}
-                            max={7}
-                            className="mt-1"
-                            value={lagYears}
-                            onChange={(e) => setLagYears(Number(e.target.value))}
-                          />
-                        </label>
-                        <label className="flex items-center gap-2 font-mono text-[0.75rem]">
-                          <input
-                            type="checkbox"
-                            checked={horizon === "capital"}
-                            onChange={(e) =>
-                              setHorizon(e.target.checked ? "capital" : "gdp")
-                            }
-                          />
-                          Solow capital instead of GDP
-                        </label>
-                      </div>
-                    ) : null}
-                  </div>
-                ))}
-              </div>
-            </div>
-          ) : null}
 
           <div className="workbench-more">
             <details>
