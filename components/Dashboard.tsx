@@ -1,7 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import SynthChart from "@/components/SynthChart";
+import { decodeState, encodeState } from "@/lib/urlState";
 import {
   COUNTRIES,
   EVENTS,
@@ -117,6 +118,77 @@ export default function Dashboard() {
   const [covidMode, setCovidMode] = useState<CovidMode>("full");
   const [lagYears, setLagYears] = useState(0);
   const [horizon, setHorizon] = useState<HorizonMode>("gdp");
+  const [ready, setReady] = useState(false);
+  const [copied, setCopied] = useState(false);
+
+  // Hydrate from the URL once, after mount. The static markup is rendered with
+  // default state, so applying the URL here (rather than in a lazy initialiser)
+  // keeps server and client markup identical and avoids a hydration mismatch.
+  // This is the "sync with an external system" case, so the set-state-in-effect
+  // rule is intentionally relaxed for this block only.
+  useEffect(() => {
+    /* eslint-disable react-hooks/set-state-in-effect */
+    const s = decodeState(window.location.search);
+    if (s.metric) setMetric(s.metric);
+    if (s.treatmentYear != null) setTreatmentYear(s.treatmentYear);
+    if (s.range) setRange(s.range);
+    if (s.weights) setWeights(s.weights);
+    if (s.scenarios) setScenarios(s.scenarios);
+    if (s.maxWeight != null) setMaxWeight(s.maxWeight);
+    if (s.excludeNondem != null) setExcludeNondem(s.excludeNondem);
+    if (s.accounting) setAccounting(s.accounting);
+    if (s.govSource) setGovSource(s.govSource);
+    if (s.covidMode) setCovidMode(s.covidMode);
+    if (s.lagYears != null) setLagYears(s.lagYears);
+    if (s.horizon) setHorizon(s.horizon);
+    setReady(true);
+    /* eslint-enable react-hooks/set-state-in-effect */
+  }, []);
+
+  // Mirror state into the URL (replace, not push, so we don't spam history).
+  useEffect(() => {
+    if (!ready) return;
+    const qs = encodeState({
+      metric,
+      treatmentYear,
+      range,
+      weights,
+      scenarios,
+      maxWeight,
+      excludeNondem,
+      accounting,
+      govSource,
+      covidMode,
+      lagYears,
+      horizon,
+    });
+    const url = qs ? `${window.location.pathname}?${qs}` : window.location.pathname;
+    window.history.replaceState(null, "", url);
+  }, [
+    ready,
+    metric,
+    treatmentYear,
+    range,
+    weights,
+    scenarios,
+    maxWeight,
+    excludeNondem,
+    accounting,
+    govSource,
+    covidMode,
+    lagYears,
+    horizon,
+  ]);
+
+  const copyLink = async () => {
+    try {
+      await navigator.clipboard.writeText(window.location.href);
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 1600);
+    } catch {
+      setCopied(false);
+    }
+  };
 
   const capOn = scenarios.includes("s1");
   const eligible = eligibleDonors({
@@ -213,6 +285,9 @@ export default function Dashboard() {
           <div className="btns mt-5 flex flex-wrap gap-3">
             <button type="button" className="btn-ghost btn" onClick={reset}>
               Reset to paper
+            </button>
+            <button type="button" className="btn-ghost btn" onClick={copyLink}>
+              {copied ? "Link copied ✓" : "Copy link to this view"}
             </button>
             <a className="btn-ghost btn" href="#workspace">
               Skip to the chart
@@ -314,140 +389,6 @@ export default function Dashboard() {
                 })}
               </div>
             </fieldset>
-          </div>
-
-          <div className="workbench-stage">
-        <figure>
-          <figcaption className="flex flex-wrap items-baseline justify-between gap-2 border-b border-rule px-4 py-2.5">
-            <span>
-              <span className="eyebrow !mb-0 inline">Figure</span>
-              <span className="ml-2 font-serif text-lg">{meta.short}</span>
-            </span>
-            <span className="font-mono text-[0.72rem] text-faint">
-              {range[0]}–{out.endYear} · treatment {out.effectiveTreatment}
-            </span>
-          </figcaption>
-          <div className="px-2 pb-2 pt-1 sm:px-4">
-            <SynthChart
-              rows={out.rows}
-              metric={metric}
-              treatmentYear={treatmentYear}
-              effectiveTreatment={out.effectiveTreatment}
-            />
-          </div>
-          <p className="border-t border-rule px-4 py-2 font-mono text-[0.72rem] leading-5 text-faint">
-            {recipe || "No eligible donors for this metric."}
-          </p>
-          <ul className="event-key" aria-label="Event marks on the figure">
-            {EVENTS.map((e) => (
-              <li
-                key={e.year}
-                className={e.year === treatmentYear ? "is-treatment" : undefined}
-              >
-                <b>{e.year}</b>
-                {e.label}
-              </li>
-            ))}
-          </ul>
-        </figure>
-
-        <section className="donor-panel" aria-labelledby="donors-h">
-            <div className="mb-2 flex items-baseline justify-between gap-2">
-              <h2 id="donors-h" className="font-serif text-xl font-medium">
-                Weights
-              </h2>
-              <span className="font-mono text-[0.72rem] text-faint">
-                Σ {(sumWeights(out.appliedWeights) * 100).toFixed(0)}%
-              </span>
-            </div>
-            <label className="mb-2 flex items-center gap-2 font-mono text-[0.75rem]">
-              <input
-                type="checkbox"
-                checked={capOn}
-                onChange={() => setScenarios(toggle(scenarios, "s1"))}
-              />
-              Cap any single country at {(displayedCap * 100).toFixed(0)}%
-            </label>
-            <ul className="mt-3 flex flex-col gap-2">
-              {SLIDER_DONORS.map((iso) => {
-                const live = out.appliedWeights[iso] ?? 0;
-                const on = eligible.includes(iso);
-                const name = COUNTRIES[iso]?.name ?? iso;
-                const pct = live * 100;
-                return (
-                  <li key={iso} className={on ? "" : "opacity-40"}>
-                    <div className="mb-0.5 flex items-baseline justify-between gap-2 font-mono text-[0.75rem]">
-                      <label htmlFor={`w-${iso}`}>
-                        {name}
-                        {COUNTRIES[iso]?.nondem ? (
-                          <span className="ml-1.5 text-[0.62rem] uppercase tracking-wide text-ledger">
-                            one-party
-                          </span>
-                        ) : null}
-                        {metric === "rgdppc" && COUNTRIES[iso]?.gdpImputed ? (
-                          <span className="ml-1.5 text-[0.62rem] text-faint">imputed</span>
-                        ) : null}
-                      </label>
-                      <span className="flex items-center gap-1">
-                        <input
-                          id={`w-${iso}-num`}
-                          type="number"
-                          min={0}
-                          max={100}
-                          step={0.1}
-                          disabled={!on}
-                          aria-label={`${name} weight percent`}
-                          value={Number(pct.toFixed(1))}
-                          onChange={(e) => onSlide(iso, Number(e.target.value))}
-                          className="w-14 text-right"
-                        />
-                        %
-                      </span>
-                    </div>
-                    <input
-                      id={`w-${iso}`}
-                      type="range"
-                      min={0}
-                      max={1000}
-                      disabled={!on}
-                      aria-valuemin={0}
-                      aria-valuemax={100}
-                      aria-valuenow={Number(pct.toFixed(1))}
-                      aria-label={`${name} weight`}
-                      value={Math.round(live * 1000)}
-                      onChange={(e) => onSlide(iso, Number(e.target.value) / 10)}
-                    />
-                  </li>
-                );
-              })}
-            </ul>
-          </section>
-        </div>
-
-          <div className="workbench-ledger" aria-label="Shortfall and fit">
-            <StatCell
-              label="Gap"
-              value={formatValue(metric, out.postGap)}
-              hint={String(out.endYear)}
-              alert
-            />
-            <StatCell
-              label="% of stacked"
-              value={formatPct(out.postGapPct)}
-              hint={`${formatValue(metric, out.indiaLast)} vs ${formatValue(metric, out.customLast)}`}
-              alert
-            />
-            <StatCell
-              label="Paper gap"
-              value={formatValue(metric, out.indiaLast - out.baselineLast)}
-              hint="Published weights"
-            />
-            <StatCell
-              label="Placebo p"
-              value={out.pValue.toFixed(2)}
-              hint={`${out.placebos.length} donors`}
-              alert={out.pValue <= 0.1}
-            />
           </div>
 
           {scenarios.length > 0 ? (
@@ -564,6 +505,148 @@ export default function Dashboard() {
             </div>
           ) : null}
 
+          <div className="workbench-stage">
+        <figure>
+          <figcaption className="flex flex-wrap items-baseline justify-between gap-2 border-b border-rule px-4 py-2.5">
+            <span>
+              <span className="eyebrow !mb-0 inline">Figure</span>
+              <span className="ml-2 font-serif text-lg">{meta.short}</span>
+            </span>
+            <span className="font-mono text-[0.72rem] text-faint">
+              {range[0]}–{out.endYear} · treatment {out.effectiveTreatment}
+            </span>
+          </figcaption>
+          <div className="px-2 pb-2 pt-1 sm:px-4">
+            <SynthChart
+              rows={out.rows}
+              metric={metric}
+              treatmentYear={treatmentYear}
+              effectiveTreatment={out.effectiveTreatment}
+            />
+          </div>
+          <p className="border-t border-rule px-4 py-2 font-mono text-[0.72rem] leading-5 text-faint">
+            {recipe || "No eligible donors for this metric."}
+          </p>
+          <ul className="event-key" aria-label="Event marks on the figure">
+            {EVENTS.map((e) => (
+              <li
+                key={e.year}
+                className={e.year === treatmentYear ? "is-treatment" : undefined}
+              >
+                <b>{e.year}</b>
+                {e.label}
+              </li>
+            ))}
+          </ul>
+        </figure>
+
+        <section className="donor-panel" aria-labelledby="donors-h">
+            <div className="mb-2 flex items-baseline justify-between gap-2">
+              <h2 id="donors-h" className="font-serif text-xl font-medium">
+                Weights
+              </h2>
+              <span className="font-mono text-[0.72rem] text-faint">
+                Σ {(sumWeights(out.appliedWeights) * 100).toFixed(0)}%
+              </span>
+            </div>
+            <label className="mb-2 flex items-center gap-2 font-mono text-[0.75rem]">
+              <input
+                type="checkbox"
+                checked={capOn}
+                onChange={() => setScenarios(toggle(scenarios, "s1"))}
+              />
+              Cap any single country at {(displayedCap * 100).toFixed(0)}%
+            </label>
+            <ul className="mt-3 flex flex-col gap-2">
+              {SLIDER_DONORS.map((iso) => {
+                const live = out.appliedWeights[iso] ?? 0;
+                const on = eligible.includes(iso);
+                const name = COUNTRIES[iso]?.name ?? iso;
+                const pct = live * 100;
+                return (
+                  <li key={iso} className={on ? "" : "opacity-40"}>
+                    <div className="mb-0.5 flex items-baseline justify-between gap-2 font-mono text-[0.75rem]">
+                      <label htmlFor={`w-${iso}`}>
+                        {name}
+                        {COUNTRIES[iso]?.nondem ? (
+                          <span className="ml-1.5 text-[0.62rem] uppercase tracking-wide text-ledger">
+                            one-party
+                          </span>
+                        ) : null}
+                        {metric === "rgdppc" && COUNTRIES[iso]?.gdpImputed ? (
+                          <span className="ml-1.5 text-[0.62rem] text-faint">imputed</span>
+                        ) : null}
+                      </label>
+                      <span className="flex items-center gap-1">
+                        <input
+                          id={`w-${iso}-num`}
+                          type="number"
+                          min={0}
+                          max={100}
+                          step={0.1}
+                          disabled={!on}
+                          aria-label={`${name} weight percent`}
+                          value={Number(pct.toFixed(1))}
+                          onChange={(e) => onSlide(iso, Number(e.target.value))}
+                          className="w-14 text-right"
+                        />
+                        %
+                      </span>
+                    </div>
+                    <input
+                      id={`w-${iso}`}
+                      type="range"
+                      min={0}
+                      max={1000}
+                      disabled={!on}
+                      aria-valuemin={0}
+                      aria-valuemax={100}
+                      aria-valuenow={Number(pct.toFixed(1))}
+                      aria-label={`${name} weight`}
+                      value={Math.round(live * 1000)}
+                      onChange={(e) => onSlide(iso, Number(e.target.value) / 10)}
+                    />
+                  </li>
+                );
+              })}
+            </ul>
+          </section>
+        </div>
+
+          <div className="workbench-ledger" aria-label="Shortfall and fit">
+            <StatCell
+              label="Gap"
+              value={formatValue(metric, out.postGap)}
+              hint={String(out.endYear)}
+              explain={`Real India minus your stacked Synthetic India in ${out.endYear}. Positive = India above its counterfactual.`}
+              alert
+            />
+            <StatCell
+              label="% of stacked"
+              value={formatPct(out.postGapPct)}
+              hint={`${formatValue(metric, out.indiaLast)} vs ${formatValue(metric, out.customLast)}`}
+              explain="The gap expressed as a share of the stacked synthetic value — how big the effect is in relative terms."
+              alert
+            />
+            <StatCell
+              label="Paper gap"
+              value={formatValue(metric, out.indiaLast - out.baselineLast)}
+              hint="Published weights"
+              explain="The same end-year gap using the paper's original published donor recipe, for comparison with your stacked scenario."
+            />
+            <StatCell
+              label="Placebo p"
+              value={Number.isFinite(out.pValue) ? out.pValue.toFixed(2) : "—"}
+              hint={
+                Number.isFinite(out.pValue)
+                  ? `${out.placebos.length} donors`
+                  : "needs pre + post years"
+              }
+              explain="Share of donor countries whose own post/pre fit ratio is at least as extreme as India's. Lower means India's gap stands out from placebo noise (≤ 0.10 highlighted)."
+              alert={out.pValue <= 0.1}
+            />
+          </div>
+
           <div className="workbench-more">
             <details>
               <summary>Window</summary>
@@ -621,7 +704,19 @@ export default function Dashboard() {
             </details>
             <details>
               <summary>Placebos</summary>
-              <div className="mt-3 overflow-x-auto">
+              <p className="mt-3 font-mono text-[0.72rem] leading-5 text-faint">
+                {Number.isFinite(out.indiaRatio) ? (
+                  <>
+                    India&apos;s own post/pre RMSPE ratio is{" "}
+                    <b className="text-ink">{out.indiaRatio.toFixed(2)}</b>. Each donor
+                    is re-fit the same way; rows in red match or beat India, and the
+                    placebo <i>p</i> = {out.pValue.toFixed(2)} is their share.
+                  </>
+                ) : (
+                  "The placebo test needs both a pre- and a post-treatment period in the window. Widen the window so it spans the treatment year."
+                )}
+              </p>
+              <div className="mt-2 overflow-x-auto">
                 <table className="ledger-table min-w-[480px]">
                   <thead>
                     <tr>
@@ -631,13 +726,16 @@ export default function Dashboard() {
                     </tr>
                   </thead>
                   <tbody>
-                    {out.placebos.map((p) => (
-                      <tr key={p.iso}>
-                        <td>{p.name}</td>
-                        <td className="num">{p.ratio.toFixed(2)}</td>
-                        <td className="num">{formatValue(metric, p.postGap)}</td>
-                      </tr>
-                    ))}
+                    {out.placebos.map((p) => {
+                      const extreme = p.ratio >= out.indiaRatio;
+                      return (
+                        <tr key={p.iso} className={extreme ? "text-ledger" : undefined}>
+                          <td>{p.name}</td>
+                          <td className="num">{p.ratio.toFixed(2)}</td>
+                          <td className="num">{formatValue(metric, p.postGap)}</td>
+                        </tr>
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>
@@ -724,10 +822,11 @@ function StatCell(props: {
   label: string;
   value: string;
   hint: string;
+  explain?: string;
   alert?: boolean;
 }) {
   return (
-    <div className="bg-paper px-3 py-3 sm:px-4">
+    <div className="bg-paper px-3 py-3 sm:px-4" title={props.explain}>
       <p className="font-mono text-[0.68rem] uppercase tracking-[0.12em] text-faint">
         {props.label}
       </p>

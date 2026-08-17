@@ -12,6 +12,8 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // Standalone test scripts run under tsx/node, not the app bundle.
+    "test/**",
   ]),
 ]);
 

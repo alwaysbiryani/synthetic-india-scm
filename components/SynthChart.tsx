@@ -67,9 +67,13 @@ export default function SynthChart({
             tickLine={false}
             axisLine={false}
             width={metric === "rgdppc" ? 52 : 44}
-            tickFormatter={(v: number) =>
-              metric === "rgdppc" ? `${Math.round(v / 1000)}k` : Number(v).toFixed(1)
-            }
+            tickFormatter={(v: number) => {
+              if (metric !== "rgdppc") return Number(v).toFixed(1);
+              // Keep a decimal on sub-10k ticks so narrow windows don't round
+              // two adjacent ticks to the same "k" label.
+              const k = v / 1000;
+              return `${Number.isInteger(k) ? k : k.toFixed(k < 10 ? 1 : 0)}k`;
+            }}
           />
           <Tooltip
             contentStyle={{
